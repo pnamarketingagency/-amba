@@ -5,6 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#050505" />
   <title>$AMBA — PRINCE OF CTOWN // Official Site</title>
+
+  <!-- Stub defined first so the YouTube API can never fire this callback into a
+       void — it may finish loading before js/main.js does. main.js checks the
+       __ytApiReady flag and registers its real handler in __ytApiReadyQueue. -->
+  <script>
+    window.__ytApiReadyQueue = [];
+    window.onYouTubeIframeAPIReady = function () {
+      window.__ytApiReady = true;
+      window.__ytApiReadyQueue.forEach(function (fn) { fn(); });
+    };
+  </script>
   <meta name="description" content="Official site of $amba (wolfsamba) — Western Sydney underground rap & melodic artist. The Prince of CTown. Stream WAKE ME UP WHEN I MAKE IT, WHITE TEE, FOREVER FALLIN and ON THE BLOCK." />
 
   <!-- Social / OpenGraph -->
@@ -44,7 +55,7 @@
     };
   </script>
 
-  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/styles.css?v=4" />
 </head>
 
 <body class="bg-bg text-text font-body antialiased selection:bg-neon selection:text-black">
@@ -107,8 +118,15 @@
   <main>
     <!-- ====================== HERO ====================== -->
     <section id="hero" class="relative flex h-[100svh] min-h-[600px] w-full items-end overflow-hidden">
-      <!-- YouTube background loop (populated by IFrame API) -->
+      <!-- YouTube background loop (populated by IFrame API).
+           A static poster sits underneath and is revealed if the embed fails
+           (rate-limit / region block / autoplay policy) so a broken YouTube
+           error box is never shown to a visitor. -->
       <div class="hero-video-wrap" aria-hidden="true">
+        <div class="hero-poster">
+          <img src="https://i.ytimg.com/vi/9jAKxDFDbS4/sddefault.jpg" alt="" loading="eager"
+               onerror="this.onerror=null;this.src='https://i.ytimg.com/vi/9jAKxDFDbS4/hqdefault.jpg';" />
+        </div>
         <div id="hero-video"></div>
       </div>
       <div class="hero-overlay" aria-hidden="true"></div>
@@ -429,6 +447,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@studio-freight/lenis@1.0.42/dist/lenis.min.js"></script>
   <script src="https://www.youtube.com/iframe_api"></script>
-  <script src="js/main.js"></script>
+  <script src="js/main.js?v=5"></script>
 </body>
 </html>

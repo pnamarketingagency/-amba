@@ -174,9 +174,45 @@
   let modalPlayer = null;
   let heroLoopTimer = null;
 
-  window.onYouTubeIframeAPIReady = function () {
+  // cc_load_policy alone isn't reliable — YouTube can override it with a viewer's
+  // cached/browser-level caption preference. Force captions off via the JS API too.
+  function killCaptions(player) {
+    try { player.unloadModule('captions'); } catch (_) {}
+    try { player.setOption('captions', 'reload', false); } catch (_) {}
+    try { player.setOption('captions', 'track', {}); } catch (_) {}
+  }
+
+  // Make the iframe fully inert: no keyboard focus, no hover/click affordances.
+  function lockDownIframe(player) {
+    try {
+      const iframe = player.getIframe && player.getIframe();
+      if (iframe) {
+        iframe.setAttribute('tabindex', '-1');
+        iframe.setAttribute('aria-hidden', 'true');
+        iframe.style.pointerEvents = 'none';
+      }
+    } catch (_) {}
+  }
+
+  function initYouTubePlayers() {
     // Hero background player
+    const wrap = $('.hero-video-wrap');
     if ($('#hero-video')) {
+      // If the embed never confirms playback (rate-limit / block / autoplay
+      // refusal), fall back to the static poster instead of a YouTube error.
+      let confirmedPlaying = false;
+      const failHero = () => {
+        if (confirmedPlaying) return;
+        if (wrap) wrap.classList.add('video-failed');
+        if (heroLoopTimer) { clearInterval(heroLoopTimer); heroLoopTimer = null; }
+        // Tear the broken embed down completely — a hidden-but-live iframe keeps
+        // running YouTube's error page (drains resources, can hang the renderer).
+        try { if (heroPlayer && heroPlayer.destroy) heroPlayer.destroy(); } catch (_) {}
+        const deadFrame = wrap && wrap.querySelector('iframe, #hero-video');
+        if (deadFrame) deadFrame.remove();
+      };
+      const heroTimeout = setTimeout(failHero, 6000);
+
       heroPlayer = new YT.Player('hero-video', {
         videoId: HERO_ID,
         playerVars: {
@@ -187,6 +223,8 @@
         events: {
           onReady: (e) => {
             e.target.mute();
+            killCaptions(e.target);
+            lockDownIframe(e.target);
             if (!REDUCED) e.target.playVideo();
             // Poll to loop the 36–138s segment
             heroLoopTimer = setInterval(() => {
@@ -199,11 +237,23 @@
           },
           onStateChange: (e) => {
             if (e.data === YT.PlayerState.ENDED) heroPlayer.seekTo(HERO_START, true);
+            if (e.data === YT.PlayerState.PLAYING) {
+              confirmedPlaying = true;
+              clearTimeout(heroTimeout);
+              killCaptions(e.target);
+              if (wrap) { wrap.classList.remove('video-failed'); wrap.classList.add('video-playing'); }
+            }
           },
+          // Error codes 2/5/100/101/150/153 → embed unusable, show poster.
+          onError: () => { clearTimeout(heroTimeout); failHero(); },
         },
       });
     }
-  };
+  }
+  // Register with the stub defined in <head> — handles both orderings:
+  // API already ready by now, or it becomes ready later.
+  if (window.__ytApiReady) initYouTubePlayers();
+  else window.__ytApiReadyQueue.push(initYouTubePlayers);
 
   function initMute() {
     const btn = $('#mute-toggle');
@@ -248,10 +298,14 @@
       if (window.YT && YT.Player) {
         modalPlayer = new YT.Player('modal-video-inner', {
           videoId,
-          playerVars: { autoplay: 1, rel: 0, modestbranding: 1, playsinline: 1 },
+          playerVars: { autoplay: 1, rel: 0, modestbranding: 1, playsinline: 1, cc_load_policy: 0, iv_load_policy: 3 },
+          events: {
+            onReady: (e) => killCaptions(e.target),
+            onStateChange: (e) => { if (e.data === YT.PlayerState.PLAYING) killCaptions(e.target); },
+          },
         });
       } else {
-        holder.outerHTML = `<iframe src="https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1" allow="autoplay; encrypted-media; fullscreen" allowfullscreen title="Video player"></iframe>`;
+        holder.outerHTML = `<iframe src="https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1&cc_load_policy=0" allow="autoplay; encrypted-media; fullscreen" allowfullscreen title="Video player"></iframe>`;
       }
       $('.theatre-close', modal).focus();
       document.addEventListener('keydown', onKey);
